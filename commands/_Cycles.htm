@@ -56,7 +56,7 @@
 			var cyclesPath = getCyclesPath(); if (cyclesPath=="not found") return;
 			var outputPath = getCyclesOutputPath(cyclesPath, outputName); if (outputPath=="not found") { moi.ui.alert ("The output folder does not exist!\nCreate "+trimPath(cyclesPath)+outputName); return; }
 			var outputPath = outputPath+moi.filesystem.getPathDelimiter()+ftime()+'-[Cycles]-'+filename+'.jpg';
-			var tempPath = 'C:/Apps/CyclesTemp/';
+			var tempPath = 'C:/Apps/CyclesTemp/';		<!-- Hard coded temp file to have easier access -->
 			var exportSettings = 'NoUI=false;Output=quads;';
 			var viewport = moi.ui.mainWindow.viewpanel.getViewport('3D');
 			var styles = moi.GeometryDatabase.getObjectStyles();
@@ -87,7 +87,7 @@
 
 			var sceneFile = moi.filesystem.openFileStream( tempPath+filenameH+'_scene.xml', 'w' );
 			sceneFile.writeLine('<cycles>');
-			sceneFile.writeLine('<camera width="960" height="640" />');
+			sceneFile.writeLine('<camera width="960" height="960" />'); <!-- Sqaure window. does this make a difference -->
 
 			for ( s in objectStl ) if (objectStl[s].length > 0 )
 			{
@@ -115,7 +115,7 @@
 					objFile.close();
 					var xmlFile = moi.filesystem.openFileStream( tempPath+filenameH+s+'.xml', 'w' );
 					xmlFile.writeLine('<?xml version="1.0" ?>');
-					xmlFile.writeLine('<cycles>');
+					xmlFile.writeLine('<cycles>');  <!-- fix format -->
 					xmlFile.writeLine('<mesh P="');		for (var i=0; i<vertices.length; i++) { xmlFile.writeLine(vertices[i]) };
 					xmlFile.writeLine('" nverts="');		for (var i=0; i<nverts.length; i++) { xmlFile.writeLine(nverts[i]) };
 					xmlFile.writeLine('" verts="');		for (var i=0; i<faces.length; i++) { xmlFile.writeLine(faces[i]) };
@@ -131,7 +131,7 @@
 			if (backgroundOn) sceneFile.writeLine('<background><background name="bg" strength="1" color="1 1 1" /><connect from="bg background" to="output surface" /></background>');
 			sceneFile.writeLine('<transform rotate="'+zCr+' 1 0 0"><transform translate="'+viewport.cameraPt.x+' '+(-1)*viewport.cameraPt.y+' '+viewport.cameraPt.z+'">');
 			sceneFile.writeLine('<transform rotate="'+(-viewport.leftRightAngle)+' 0 0 1"><transform rotate="'+(180-viewport.upDownAngle)+' 1 0 0">');
-			sceneFile.writeLine('<camera type="perspective" />');
+			sceneFile.writeLine('<camera type="perspective" />');		<!-- Fov was very off was removed till i understand -->
 			sceneFile.writeLine('</transform></transform></transform></transform>');
 			sceneFile.writeLine('</cycles>');
         		sceneFile.close();
