@@ -49,14 +49,14 @@
 		}
 		function Cycles(rebuild, samples)
 		{
-			if (!samples) samples=10000;
+			if (!samples) samples=1000;
 			var filenameH = filename = 'moi';
 			var outputName='output';
 			if (moi.geometryDatabase.currentFileName !=='' ) { filename = moi.filesystem.getFileNameFromPath(moi.geometryDatabase.currentFileName).split('.')[0]; filenameH = hash(filename); }
 			var cyclesPath = getCyclesPath(); if (cyclesPath=="not found") return;
 			var outputPath = getCyclesOutputPath(cyclesPath, outputName); if (outputPath=="not found") { moi.ui.alert ("The output folder does not exist!\nCreate "+trimPath(cyclesPath)+outputName); return; }
 			var outputPath = outputPath+moi.filesystem.getPathDelimiter()+ftime()+'-[Cycles]-'+filename+'.jpg';
-			var tempPath = moi.filesystem.getTempDir();
+			var tempPath = 'C:/Apps/CyclesTemp/';
 			var exportSettings = 'NoUI=false;Output=quads;';
 			var viewport = moi.ui.mainWindow.viewpanel.getViewport('3D');
 			var styles = moi.GeometryDatabase.getObjectStyles();
@@ -86,6 +86,7 @@
 			for ( var o=0; o<objs.length; o++ ) { var obj = objs.item(o); objectStl[obj.styleIndex].addObject(obj); }
 
 			var sceneFile = moi.filesystem.openFileStream( tempPath+filenameH+'_scene.xml', 'w' );
+			sceneFile.writeLine('<cycles>');
 			sceneFile.writeLine('<camera width="960" height="640" />');
 
 			for ( s in objectStl ) if (objectStl[s].length > 0 )
@@ -114,10 +115,12 @@
 					objFile.close();
 					var xmlFile = moi.filesystem.openFileStream( tempPath+filenameH+s+'.xml', 'w' );
 					xmlFile.writeLine('<?xml version="1.0" ?>');
+					xmlFile.writeLine('<cycles>');
 					xmlFile.writeLine('<mesh P="');		for (var i=0; i<vertices.length; i++) { xmlFile.writeLine(vertices[i]) };
 					xmlFile.writeLine('" nverts="');		for (var i=0; i<nverts.length; i++) { xmlFile.writeLine(nverts[i]) };
 					xmlFile.writeLine('" verts="');		for (var i=0; i<faces.length; i++) { xmlFile.writeLine(faces[i]) };
 					xmlFile.writeLine('" />');
+					xmlFile.writeLine('</cycles>');
 					xmlFile.close();
 				}
 				sceneFile.writeLine('<shader name="style'+s+'">'+style[s].xml+'</shader>');
@@ -128,10 +131,11 @@
 			if (backgroundOn) sceneFile.writeLine('<background><background name="bg" strength="1" color="1 1 1" /><connect from="bg background" to="output surface" /></background>');
 			sceneFile.writeLine('<transform rotate="'+zCr+' 1 0 0"><transform translate="'+viewport.cameraPt.x+' '+(-1)*viewport.cameraPt.y+' '+viewport.cameraPt.z+'">');
 			sceneFile.writeLine('<transform rotate="'+(-viewport.leftRightAngle)+' 0 0 1"><transform rotate="'+(180-viewport.upDownAngle)+' 1 0 0">');
-			sceneFile.writeLine('<camera type="perspective" fov="'+viewport.fieldOfViewAngle+'"/>');
+			sceneFile.writeLine('<camera type="perspective" />');
 			sceneFile.writeLine('</transform></transform></transform></transform>');
+			sceneFile.writeLine('</cycles>');
         		sceneFile.close();
-			moi.filesystem.shellExecute(cyclesPath,'--samples '+samples+' --output "'+outputPath+'" '+ tempPath+filenameH+'_scene.xml');
+			moi.filesystem.shellExecute(cyclesPath,'--samples '+samples+' --device OPTIX --output "'+outputPath+'" '+ tempPath+filenameH+'_scene.xml');
 		}
 		</script>
 	</head>
