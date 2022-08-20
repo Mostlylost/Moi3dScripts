@@ -1,0 +1,146 @@
+<html xmlns:moi>
+	<head>
+		<link rel="stylesheet" href="moi://ui/moi.css" type="text/css">
+		<script>
+		function ftime()
+		{
+			var d = new Date(), a=d.getDate(), o=d.getMonth()+1, y=d.getYear(), h=d.getHours(), m=d.getMinutes(), s=d.getSeconds();
+			a=(a>9)?a:'0'+a; o=(o>9)?o:'0'+o; y=(y>999)?y:1900+y; h=(h>9)?h:'0'+h; m=(m>9)?m:'0'+m; s=(s>9)?s:'0'+s;
+			return y+'.'+o+'.'+a+'-'+h+'.'+m+'.'+s;
+		}
+		function hash(st) { var hash = 0; if (st.length > 0) for ( var i = 0; i < st.length; i++) { var chr = st.charCodeAt(i); hash=((hash << 5)-hash)+chr; hash |= 0; } return Math.abs(hash); };
+		function resetPaths() { moi.command.setOption('CyclesPath', "-", true); }
+		function getCyclesPath()
+		{
+			var CyclesPath="-"; try { CyclesPath =  moi.command.getOption('CyclesPath', true); } catch (e) {}
+			if ( !moi.filesystem.fileExists(CyclesPath)) { var CyclesPath = moi.filesystem.getOpenFileName( 'Select where cycles.exe is located', '(cycles.exe)|cycles.exe' );
+				if ( CyclesPath ) { moi.command.setOption('CyclesPath', CyclesPath, true); } else { return 'not found'; }}
+			return CyclesPath;
+		}
+		function trimPath(path) { return path.substr(0,path.lastIndexOf(moi.filesystem.getFileNameFromPath(path))); }
+		function getCyclesOutputPath(path, output)	{ var outputPath = trimPath(path)+output; if (moi.filesystem.dirExists(outputPath)) { return outputPath } else { return 'not found';} }
+		function createNode (index, color, matsettings)
+		{
+			var mat = matsettings.split(':'), node={}, R = color, G, B;
+			node.type="";
+			if (mat.length == 1) mat[1]=0;
+			if (mat.length < 3) mat[2]=0;
+			if (R=== 0) { R=G=B=240; } else { B=R%256; R=(R-B)/256; G=R%256; R=(R-G)/256;}	R=R/256; G=G/256; B=B/256;
+			if (mat[0] === "D") { node.xml = '<diffuse_bsdf name="style'+index+'" roughness="'+(mat[1]/100)+'" color="'+R+', '+G+', '+B+'" /><connect from="style'+index+' bsdf" to="output surface" />'; }
+			if (mat[0] === "G") { node.xml = '<glossy_bsdf name="style'+index+'" roughness="'+(mat[1]/100)+'" color="'+R+', '+G+', '+B+'" /><connect from="style'+index+' bsdf" to="output surface" />'; }
+			if (mat[0] === "S") { node.xml = '<glass_bsdf name="style'+index+'" roughness="'+(mat[1]/100)+'" color="'+R+', '+G+', '+B+'" /><connect from="style'+index+' bsdf" to="output surface" />'; }
+			if (mat[0] === "V") { node.xml = '<velvet_bsdf name="style'+index+'" sigma="'+(mat[1]/100)+'" color="'+R+', '+G+', '+B+'" /><connect from="style'+index+' bsdf" to="output surface" />'; }
+			if (mat[0] === "C") { node.xml = '<toon_bsdf name="style'+index+'" smooth="'+(mat[1]/100)+'" color="'+R+', '+G+', '+B+'" /><connect from="style'+index+' bsdf" to="output surface" />'; }
+			if (mat[0] === "T") { node.xml = '<translucent_bsdf name="style'+index+'" color="'+R+', '+G+', '+B+'" /><connect from="style'+index+' bsdf" to="output surface" />'; }
+			if (mat[0] === "A") { node.xml = '<ambient_occlusion name="style'+index+'" color="'+R+', '+G+', '+B+'" /><connect from="style'+index+' ao" to="output surface" />'; }
+			if (mat[0] === "TR") { node.xml = '<transparent_bsdf name="style'+index+'" color="'+R+', '+G+', '+B+'" /><connect from="style'+index+' bsdf" to="output surface" />'; }
+			if (mat[0] === "CH") { node.xml = '<checker_texture name="checker'+index+'" color1="'+R+', '+G+', '+B+'" color2="1, 1, 1" /><diffuse_bsdf name="style'+index+'" roughness="'+(mat[1]/100)+'" color="'+R+', '+G+', '+B+'" /><connect from="checker'+index+' color" to="style'+index+' color" /><connect from="style'+index+' bsdf" to="output surface" />'; }
+			if (mat[0] === "E") { node.type="emission"; node.extra=mat[2]; node.xml = '<emission name="style'+index+'" strength="'+mat[1]+'" color="'+R+', '+G+', '+B+'" /><connect from="style'+index+' emission" to="output surface" />'; }
+			return node;
+		}
+		function mixNodes(index, node1, node2, weight)
+		{
+			var node={};
+			if (node1.type == 'emission' || node2.type == 'emission' ) { node.type="emission"; } else { node.type="mix"; }
+			var st1=node1.xml;		st1=st1.replace(RegExp("style"+index, "g"), "style"+index+"a").replace("output surface", "style"+index+" closure1");
+			var st2=node2.xml;		st2=st2.replace(RegExp("style"+index, "g"), "style"+index+"b").replace("output surface", "style"+index+" closure2");
+			node.xml = '<mix_closure name="style'+index+'" Fac="'+weight/100+'" />'+st1+st2+'<connect from="style'+index+' closure" to="output surface" />';
+			return node;
+		}
+		function Cycles(rebuild, samples)
+		{
+			if (!samples) samples=10000;
+			var filenameH = filename = 'moi';
+			var outputName='output';
+			if (moi.geometryDatabase.currentFileName !=='' ) { filename = moi.filesystem.getFileNameFromPath(moi.geometryDatabase.currentFileName).split('.')[0]; filenameH = hash(filename); }
+			var cyclesPath = getCyclesPath(); if (cyclesPath=="not found") return;
+			var outputPath = getCyclesOutputPath(cyclesPath, outputName); if (outputPath=="not found") { moi.ui.alert ("The output folder does not exist!\nCreate "+trimPath(cyclesPath)+outputName); return; }
+			var outputPath = outputPath+moi.filesystem.getPathDelimiter()+ftime()+'-[Cycles]-'+filename+'.jpg';
+			var tempPath = moi.filesystem.getTempDir();
+			var exportSettings = 'NoUI=false;Output=quads;';
+			var viewport = moi.ui.mainWindow.viewpanel.getViewport('3D');
+			var styles = moi.GeometryDatabase.getObjectStyles();
+			var zCr = (moi.settings.objExportOrientation === "Z-Up")?-90:0;
+			var objectStl = [], style = [], backgroundOn=true;
+			for ( var s=0; s < styles.length; s++ )
+			{
+				var idx = styles.item(s).index;
+				var color = styles.item(s).color;
+				var name = styles.item(s).name;
+				objectStl[idx] = moi.geometryDatabase.createObjectList();
+				var stlp = name.split(/\[(.*?)\]/);
+				if (stlp.length>1)
+				{
+					stlp = stlp[1].split(' ');
+					if (stlp.length === 1) style[idx] = createNode(idx, color, stlp[0]);
+					if (stlp.length === 2) style[idx] = mixNodes(idx, createNode(idx, color, stlp[0]), createNode(idx, color, stlp[1]), 50);
+					if (stlp.length === 3) style[idx] = mixNodes(idx, createNode(idx, color, stlp[0]), createNode(idx, color, stlp[1]), stlp[2]);
+				}
+				else style[idx] = createNode(idx, color,'V:100');
+			}
+
+			var objs = moi.geometryDatabase.getSelectedObjects();
+			if ( objs.length === 0 ) { moi.geometryDatabase.invertSelection(); objs = moi.geometryDatabase.getSelectedObjects(); }
+			moi.geometryDatabase.getObjects().setProperty("selected",0);
+			if ( objs.length === 0 ) return;
+			for ( var o=0; o<objs.length; o++ ) { var obj = objs.item(o); objectStl[obj.styleIndex].addObject(obj); }
+
+			var sceneFile = moi.filesystem.openFileStream( tempPath+filenameH+'_scene.xml', 'w' );
+			sceneFile.writeLine('<camera width="960" height="640" />');
+
+			for ( s in objectStl ) if (objectStl[s].length > 0 )
+			{
+				var pts = objectStl[s].getPoints();
+				if ( pts.length !== objectStl[s].length && rebuild )
+				{
+					objectStl[s].setProperty("selected",1);
+					moi.filesystem.deleteFile(tempPath+filenameH+s+'.obj');
+					moi.GeometryDatabase.fileExport( tempPath+filenameH+s+'.obj', exportSettings );
+					var vertices=[], nverts=[], faces=[]
+					var objFile = moi.filesystem.openFileStream( tempPath+filenameH+s+'.obj', 'r' );
+					while ( !objFile.AtEOF )
+					{
+						var nextLine = objFile.readLine().split(' ');
+						if ( nextLine[0] === "v" ) vertices.push(nextLine[1]+" "+nextLine[3]+" "+nextLine[2]);
+						if (  nextLine[0] === "f" )
+						{
+							var face = []; facest='';
+							for (var i=1; i < nextLine.length; i++) face.push(nextLine[i].split("/",1)-1);
+							for (var i=0; i<face.length; i++){	facest=facest+face[i]+" ";}
+							faces.push(facest);
+							nverts.push(face.length);
+						}
+					}
+					objFile.close();
+					var xmlFile = moi.filesystem.openFileStream( tempPath+filenameH+s+'.xml', 'w' );
+					xmlFile.writeLine('<?xml version="1.0" ?>');
+					xmlFile.writeLine('<mesh P="');		for (var i=0; i<vertices.length; i++) { xmlFile.writeLine(vertices[i]) };
+					xmlFile.writeLine('" nverts="');		for (var i=0; i<nverts.length; i++) { xmlFile.writeLine(nverts[i]) };
+					xmlFile.writeLine('" verts="');		for (var i=0; i<faces.length; i++) { xmlFile.writeLine(faces[i]) };
+					xmlFile.writeLine('" />');
+					xmlFile.close();
+				}
+				sceneFile.writeLine('<shader name="style'+s+'">'+style[s].xml+'</shader>');
+				if (pts.length !== objectStl[s].length) sceneFile.writeLine('<state interpolation="smooth" shader="style'+s+'"><include src="./'+filenameH+s+'.xml" /></state>');
+				if (style[s].type==='emission') { backgroundOn=false;	for ( var i=0; i<pts.length; i++) sceneFile.writeLine('<state shader="style'+s+'"><light type="0" P="'+pts.item(i).pt.x+', '+(-pts.item(i).pt.y)+', '+pts.item(i).pt.z+'" size="'+style[s].extra+'" /></state>');}
+				objectStl[s].setProperty("selected",0);
+			}
+			if (backgroundOn) sceneFile.writeLine('<background><background name="bg" strength="1" color="1 1 1" /><connect from="bg background" to="output surface" /></background>');
+			sceneFile.writeLine('<transform rotate="'+zCr+' 1 0 0"><transform translate="'+viewport.cameraPt.x+' '+(-1)*viewport.cameraPt.y+' '+viewport.cameraPt.z+'">');
+			sceneFile.writeLine('<transform rotate="'+(-viewport.leftRightAngle)+' 0 0 1"><transform rotate="'+(180-viewport.upDownAngle)+' 1 0 0">');
+			sceneFile.writeLine('<camera type="perspective" fov="'+viewport.fieldOfViewAngle+'"/>');
+			sceneFile.writeLine('</transform></transform></transform></transform>');
+        		sceneFile.close();
+			moi.filesystem.shellExecute(cyclesPath,'--samples '+samples+' --output "'+outputPath+'" '+ tempPath+filenameH+'_scene.xml');
+		}
+		</script>
+	</head>
+	<body class="commandbody">
+		<div class="commandheader">
+		<div id="Title" class="commandprompt">Cycles</div>
+		</div>
+		<div id="Options" class="commandoptions">
+		<div id="progressinfo" class="commandoptions" style="text-align:center; font-size:75%;">-- Exporting --</div>
+		</div>
+	</body>
+</html>
