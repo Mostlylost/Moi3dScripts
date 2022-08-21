@@ -7,4 +7,4 @@ Commands folder has edited scripts. The only one right now is for cycles to work
 
 Thank to the blender Devs for correcting the build errors. August 2022.
 
-Cycles 3.3 extended is built with optix and sm_35 and up.
+Cycles 3.3 extended; Cycles Standalone 3.3 built with optix and sm_35 and up.
